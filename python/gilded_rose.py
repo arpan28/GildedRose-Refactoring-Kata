@@ -9,7 +9,7 @@ class GildedRose(object):
 
     def __init__(self, items):
         """
-        Initializes the GildedRose system with a list of items.
+        Initializes the GildedRose system with a list of Item objects.
 
         Args:
             items (list): A list of Item objects representing the inventory.
@@ -19,75 +19,106 @@ class GildedRose(object):
     def _update_item_quality_bounds(self, item):
         """
         Ensures an item's quality stays within the allowed bounds (0 to 50).
-        Sulfuras is an exception and its quality is not bound.
+        "Sulfuras" is an exception and its quality is not bound.
+        This method should be called after all other quality adjustments for the day.
         """
-        # Sulfuras has a fixed quality of 80 and is not subject to the 0-50 bounds.
-        if item.name != "Sulfuras, Hand of Ragnaros":
-            if item.quality > 50:
-                item.quality = 50
-            if item.quality < 0:
-                item.quality = 0
+        # "Sulfuras" has a fixed quality of 80 and is not subject to the 0-50 bounds.
+        if item.name == "Sulfuras, Hand of Ragnaros":
+            return # Skip bounds check for legendary item
+
+        if item.quality > 50:
+            item.quality = 50
+        if item.quality < 0:
+            item.quality = 0
+
+    def _update_normal_item(self, item):
+        """
+        Updates quality and sell_in for a normal item.
+        Quality degrades by 1 per day, and twice as fast after sell_in date passes.
+        """
+        # Decrease quality
+        item.quality -= 1
+
+        # Decrease sell_in
+        item.sell_in -= 1
+
+        # If sell_in date has passed, quality degrades an additional time
+        if item.sell_in < 0:
+            item.quality -= 1
+
+    def _update_aged_brie(self, item):
+        """
+        Updates quality and sell_in for "Aged Brie".
+        Quality increases by 1 per day, and twice as fast after sell_in date passes.
+        """
+        # Increase quality
+        item.quality += 1
+
+        # Decrease sell_in
+        item.sell_in -= 1
+
+        # If sell_in date has passed, quality increases an additional time
+        if item.sell_in < 0:
+            item.quality += 1
+
+    def _update_backstage_pass(self, item):
+        """
+        Updates quality and sell_in for "Backstage passes".
+        Quality increases based on sell_in remaining days, drops to 0 after concert.
+        """
+        # Increase quality normally
+        item.quality += 1
+
+        # Additional quality increase if sell_in is 10 days or less
+        if item.sell_in < 11:
+            item.quality += 1 # Increase by 1 (total +2)
+        # Additional quality increase if sell_in is 5 days or less
+        if item.sell_in < 6:
+            item.quality += 1 # Increase by 1 (total +3)
+
+        # Decrease sell_in
+        item.sell_in -= 1
+
+        # If sell_in date has passed (concert over), quality drops to 0
+        if item.sell_in < 0:
+            item.quality = 0
+
+    def _update_conjured_item(self, item):
+        """
+        Updates quality and sell_in for "Conjured" items.
+        Quality degrades twice as fast as normal items (by 2 per day, by 4 after sell_in).
+        """
+        # Decrease quality by 2 (twice as fast as normal)
+        item.quality -= 2
+
+        # Decrease sell_in
+        item.sell_in -= 1
+
+        # If sell_in date has passed, quality degrades an additional 2 times (total -4)
+        if item.sell_in < 0:
+            item.quality -= 2
 
     def update_quality(self):
         """
-        Updates the quality and sell_in for all items in the inventory for one day.
-        This method applies specific rules for different item categories:
-        - Normal items: Quality degrades by 1 per day, and twice as fast after sell_in.
-        - Aged Brie: Quality increases by 1 per day, and twice as fast after sell_in.
-        - Sulfuras: A legendary item; its quality and sell_in never change.
-        - Backstage passes: Quality increases based on sell_in remaining days (1, 2, or 3),
-                           and drops to 0 after the concert.
-        - Conjured items: Quality degrades twice as fast as normal items (by 2 per day,
-                          and by 4 per day after sell_in).
+        Orchestrates the daily update of quality and sell_in for all items.
+        Delegates specific item update logic to private helper methods.
         """
         for item in self.items:
-            # Rule: "Sulfuras", being a legendary item, never has to be sold or decreases in Quality
+            # "Sulfuras" is a legendary item; its quality and sell_in never change.
             if item.name == "Sulfuras, Hand of Ragnaros":
                 continue # Skip all updates for Sulfuras
 
-            # Rule: "Aged Brie" actually increases in Quality the older it gets
+            # Delegate update logic based on item name
             if item.name == "Aged Brie":
-                item.quality += 1
-            # Rule: "Backstage passes" increase in Quality as its SellIn value approaches
+                self._update_aged_brie(item)
             elif item.name == "Backstage passes to a TAFKAL80ETC concert":
-                # Quality increases by 1 normally
-                item.quality += 1
-                # Quality increases by 2 when there are 10 days or less
-                if item.sell_in < 11:
-                    item.quality += 1
-                # Quality increases by 3 when there are 5 days or less
-                if item.sell_in < 6:
-                    item.quality += 1
-            # New Rule: "Conjured" items degrade in Quality twice as fast as normal items
-            # This means a base degradation of -2 per day.
-            elif "Conjured" in item.name:
-                item.quality -= 2
-            # Default for all other "Normal" items
+                self._update_backstage_pass(item)
+            elif "Conjured" in item.name: # Checks if "Conjured" is part of the name
+                self._update_conjured_item(item)
             else:
-                item.quality -= 1
+                self._update_normal_item(item) # Default for all other "Normal" items
 
-            item.sell_in -= 1
-
-
-            if item.sell_in < 0:
-                # Rule: Once the sell by date has passed, Quality degrades twice as fast (for normal items)
-                # Rule: "Aged Brie" increases in Quality even faster once sell_in passes
-                if item.name == "Aged Brie":
-                    item.quality += 1
-                # Rule: "Backstage passes" Quality drops to 0 after the concert
-                elif item.name == "Backstage passes to a TAFKAL80ETC concert":
-                    item.quality = 0
-                # New Rule: "Conjured" items degrade twice as fast (additional degradation after sell_in)
-                # This makes the total degradation -4 per day after sell_in.
-                elif "Conjured" in item.name:
-                    item.quality -= 2
-                # Default for all other "Normal" items: degrade an additional time.
-                # This makes the total degradation -2 per day after sell_in.
-                else:
-                    item.quality -= 1
-
-            # Rule: The Quality of an item is never negative
-            # Rule: The Quality of an item is never more than 50
+            # Ensure quality is within bounds (0 to 50) for all items except Sulfuras
             self._update_item_quality_bounds(item)
 
 

@@ -15,6 +15,13 @@ class GildedRose(object):
             items (list): A list of Item objects representing the inventory.
         """
         self.items = items
+        # Define a dictionary to map specific item names to their update strategies.
+        self._update_strategies = {
+            "Aged Brie": self._update_aged_brie,
+            "Backstage passes to a TAFKAL80ETC concert": self._update_backstage_pass,
+            # Normal items and Conjured items are handled outside this dictionary
+            # due to their more general or substring-based matching rules.
+        }
 
     def _update_item_quality_bounds(self, item):
         """
@@ -24,7 +31,7 @@ class GildedRose(object):
         """
         # "Sulfuras" has a fixed quality of 80 and is not subject to the 0-50 bounds.
         if item.name == "Sulfuras, Hand of Ragnaros":
-            return # Skip bounds check for legendary item
+            return 
 
         if item.quality > 50:
             item.quality = 50
@@ -101,22 +108,17 @@ class GildedRose(object):
     def update_quality(self):
         """
         Orchestrates the daily update of quality and sell_in for all items.
-        Delegates specific item update logic to private helper methods.
+        Delegates specific item update logic to private helper methods using a strategy map.
         """
         for item in self.items:
             # "Sulfuras" is a legendary item; its quality and sell_in never change.
             if item.name == "Sulfuras, Hand of Ragnaros":
                 continue # Skip all updates for Sulfuras
-
-            # Delegate update logic based on item name
-            if item.name == "Aged Brie":
-                self._update_aged_brie(item)
-            elif item.name == "Backstage passes to a TAFKAL80ETC concert":
-                self._update_backstage_pass(item)
-            elif "Conjured" in item.name: # Checks if "Conjured" is part of the name
+            if "Conjured" in item.name:
                 self._update_conjured_item(item)
             else:
-                self._update_normal_item(item) # Default for all other "Normal" items
+                updater_func = self._update_strategies.get(item.name, self._update_normal_item)
+                updater_func(item)
 
             # Ensure quality is within bounds (0 to 50) for all items except Sulfuras
             self._update_item_quality_bounds(item)
